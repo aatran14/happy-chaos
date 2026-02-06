@@ -6,11 +6,15 @@ export function ConnectionStatus() {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // Monitor Supabase connection status
-    const channel = supabase.channel('status-check');
+    // Monitor the same channel used for collaboration
+    // This shows real-time CRDT sync status
+    const channel = supabase.channel('doc-collab');
 
     channel.subscribe((status) => {
       setIsConnected(status === 'SUBSCRIBED');
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Connection status: Live');
+      }
     });
 
     return () => {

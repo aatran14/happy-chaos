@@ -1,26 +1,25 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './hooks/useAuth';
-import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { useEffect } from 'react';
+import { AuthProvider, useAuth } from './hooks/useAuth';
 import { LoginPage } from './pages/LoginPage';
 import { EditorPage } from './pages/EditorPage';
+import { testBroadcast } from './lib/test-broadcast';
+
+function AppContent() {
+  const { isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    // Test if Supabase Realtime works at all
+    testBroadcast();
+  }, []);
+
+  // Single page - just show login or editor
+  return isAuthenticated ? <EditorPage /> : <LoginPage />;
+}
 
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <EditorPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <AppContent />
     </AuthProvider>
   );
 }

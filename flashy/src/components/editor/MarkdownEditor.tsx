@@ -3,9 +3,13 @@ import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
 import { EditorView as EditorViewType } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
-import { yCollab } from 'y-codemirror.next';
+import { yCollab, yRemoteSelections, yRemoteSelectionsTheme } from 'y-codemirror.next';
 import { UndoManager } from 'yjs';
 import { collaborationManager } from '../../lib/CollaborationManager';
+import { EditorView as CMEditorView } from '@codemirror/view';
+import { getCursorDataUrl } from '../../config/cursorSvg';
+import { keymap } from '@codemirror/view';
+import { indentWithTab } from '@codemirror/commands';
 import './MarkdownEditor.css';
 
 export function MarkdownEditor() {
@@ -23,10 +27,18 @@ export function MarkdownEditor() {
     const { ydoc, provider } = collaborationManager.connect();
     const ytext = ydoc.getText('content');
 
+    // Get local user's color for cursor
+    const localUser = provider.awareness.getLocalState()?.user;
+    const userColor = localUser?.color || '#6BCF7F';
+
+    // Get cursor data URL from centralized config
+    const cursorDataUrl = getCursorDataUrl(userColor);
+
     console.log('📊 Provider status:', {
       connected: provider.connected,
       clientID: ydoc.clientID,
       awarenessStates: provider.awareness.getStates().size,
+      userColor,
     });
 
     // Wait for database to load before enabling editor (Rule 2)
@@ -51,15 +63,32 @@ export function MarkdownEditor() {
 
     console.log('📄 Initial Yjs content length:', ytext.length);
 
+    // Create custom theme for local cursor color and custom mouse cursor
+    const cursorTheme = CMEditorView.theme({
+      '.cm-cursor, .cm-dropCursor': {
+        borderLeftColor: userColor,
+        borderLeftWidth: '2px',
+      },
+      '.cm-selectionBackground': {
+        backgroundColor: userColor + '40', // Add transparency
+      },
+      '.cm-content': {
+        cursor: `url(${cursorDataUrl}) 0 0, text`,
+      },
+    });
+
     // Create CodeMirror editor with Yjs collaboration
     const state = EditorState.create({
       doc: ytext.toString(), // Set initial content from Yjs
       extensions: [
         basicSetup,
         markdown(),
+        keymap.of([indentWithTab]),
         yCollab(ytext, provider.awareness, {
           undoManager,
         }),
+        yRemoteSelectionsTheme,
+        cursorTheme,
       ],
     });
 
@@ -76,7 +105,6 @@ export function MarkdownEditor() {
     if (!isReady) {
       view.contentDOM.setAttribute('contenteditable', 'false');
       view.contentDOM.style.opacity = '0.5';
-      view.contentDOM.style.cursor = 'wait';
     }
 
     // Add listeners to debug sync
@@ -106,16 +134,52 @@ export function MarkdownEditor() {
         totalUsers: states.size,
         localClientID: ydoc.clientID,
       });
-      states.forEach((state, clientID) => {
+      states.forEach((state: any, clientID: number) => {
         console.log(`  User ${clientID}:`, state.user);
       });
     });
+
+    // Listen for scroll requests from flashcard clicks
+    const handleScrollToLine = (event: any) => {
+      const { lineNumber } = event.detail;
+      if (!viewRef.current) return;
+
+      const view = viewRef.current;
+      const line = view.state.doc.line(lineNumber + 1); // CodeMirror lines are 1-indexed
+      const pos = line.from;
+
+      // Get the DOM element for the line and find the .cm-line element
+      let element: HTMLElement | null = view.domAtPos(pos)?.node as HTMLElement;
+      while (element && !element.classList?.contains('cm-line')) {
+        element = element.parentElement;
+      }
+
+      if (element) {
+        // Use native smooth scroll
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Add highlight effect after scroll completes
+        setTimeout(() => {
+          if (element) {
+            element.classList.add('highlight-flash');
+            setTimeout(() => {
+              if (element) {
+                element.classList.remove('highlight-flash');
+              }
+            }, 1000);
+          }
+        }, 800);
+      }
+    };
+
+    window.addEventListener('scrollToLine', handleScrollToLine);
 
     console.log('✅ MarkdownEditor: Ready with collaborative cursors!');
 
     return () => {
       setIsReady(false);
       console.log('🧹 MarkdownEditor: Cleaning up...');
+      window.removeEventListener('scrollToLine', handleScrollToLine);
       view.destroy();
       collaborationManager.disconnect();
       viewRef.current = null;
@@ -127,7 +191,6 @@ export function MarkdownEditor() {
     if (isReady && viewRef.current) {
       viewRef.current.contentDOM.setAttribute('contenteditable', 'true');
       viewRef.current.contentDOM.style.opacity = '1';
-      viewRef.current.contentDOM.style.cursor = 'text';
       console.log('⌨️  Editor enabled - ready for input');
     }
   }, [isReady]);

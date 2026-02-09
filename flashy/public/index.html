@@ -5,6 +5,10 @@
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />
+    <!-- Prevent caching to ensure users get updates -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <meta
       name="description"
       content="Web site created using create-react-app"
@@ -24,10 +28,96 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
-    <title>React App</title>
+    <title>Flashy - Collaborative Study Notes</title>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
+
+    <!-- NUCLEAR cache clear on page load - runs ONCE per session -->
+    <script>
+      (async function() {
+        // Prevent infinite reload loops
+        const hasRefreshed = sessionStorage.getItem('flashy_refreshed');
+        if (hasRefreshed) {
+          console.log('✅ Already refreshed this session, skipping check');
+          return;
+        }
+
+        try {
+          console.log('🔍 Checking for stale code...');
+
+          // Fetch fresh index.html
+          const response = await fetch('/?t=' + Date.now(), {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' }
+          });
+          const freshHtml = await response.text();
+
+          // Extract bundle hash from fresh HTML
+          const freshMatch = freshHtml.match(/main\.([a-f0-9]+)\.js/);
+          if (!freshMatch) {
+            console.log('Could not extract hash from HTML');
+            return;
+          }
+
+          const freshHash = freshMatch[1];
+          const storedHash = localStorage.getItem('flashy_hash');
+
+          console.log('Fresh hash:', freshHash);
+          console.log('Stored hash:', storedHash);
+
+          // First load - store hash and continue
+          if (!storedHash) {
+            localStorage.setItem('flashy_hash', freshHash);
+            console.log('✅ First load, hash stored');
+            return;
+          }
+
+          // Hash mismatch = stale code
+          if (storedHash !== freshHash) {
+            console.log('🚨 STALE CODE DETECTED! Clearing everything...');
+
+            // Mark that we're about to refresh (prevents infinite loop)
+            sessionStorage.setItem('flashy_refreshed', 'true');
+
+            // Clear localStorage (keeps sessionStorage.flashy_refreshed)
+            const oldAuth = {
+              user_id: localStorage.getItem('flashy_user_id'),
+              username: localStorage.getItem('flashy_username')
+            };
+            localStorage.clear();
+            // Restore auth so user doesn't have to re-login
+            if (oldAuth.user_id) localStorage.setItem('flashy_user_id', oldAuth.user_id);
+            if (oldAuth.username) localStorage.setItem('flashy_username', oldAuth.username);
+
+            // Store new hash
+            localStorage.setItem('flashy_hash', freshHash);
+
+            // Clear IndexedDB
+            if ('indexedDB' in window) {
+              const dbs = await indexedDB.databases();
+              for (const db of dbs) {
+                if (db.name) indexedDB.deleteDatabase(db.name);
+              }
+            }
+
+            // Clear HTTP caches
+            if ('caches' in window) {
+              const names = await caches.keys();
+              await Promise.all(names.map(n => caches.delete(n)));
+            }
+
+            console.log('🔄 Force reloading with fresh code...');
+            window.location.reload(true);
+          } else {
+            console.log('✅ Code is fresh');
+          }
+        } catch (e) {
+          console.error('❌ Cache check failed:', e);
+        }
+      })();
+    </script>
+
     <div id="root"></div>
     <!--
       This HTML file is a template.

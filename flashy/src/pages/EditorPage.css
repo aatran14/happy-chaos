@@ -2,26 +2,56 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #f9fafb;
+  background-color: white;
+  position: relative;
+}
+
+.editor-page::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  background: linear-gradient(to bottom, #f1e6ff, #fbf9fc);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .editor-header {
+  /* background: linear-gradient(to right, #B399D4, white); */
   background: white;
-  border-bottom: 1px solid #e5e7eb;
+  border: 1px solid #e5e7eb;
   padding: 16px 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin: 16px 10% 0 10%;
+  border-radius: 24px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  top: 16px;
+  z-index: 200;
+  flex-shrink: 0;
+}
+
+.editor-header.scrolled {
+  box-shadow: 0 8px 24px rgba(179, 153, 212, 0.3);
+  transform: scale(0.98);
+}
+
+.editor-title-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .editor-title {
   margin: 0;
   font-size: 24px;
   font-weight: 700;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: black;
 }
 
 .header-actions {
@@ -50,15 +80,45 @@
 .editor-container {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  position: relative;
+  z-index: 10;
+  gap: 0;
 }
 
 .editor-content {
   flex: 1;
-  overflow: hidden;
   margin: 24px 0 24px 24px;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+.resize-handle {
+  width: 12px;
+  background: transparent;
+  cursor: ew-resize;
+  position: relative;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.resize-stick {
+  position: fixed;
+  top: 55vh;
+  width: 3px;
+  height: 300px;
+  background: #B399D4;
+  transform: translateY(-50%);
+  margin-left: 4.5px;
+  border-radius: 999px;
+  opacity: 0.5;
+  transition: opacity 0.2s, width 0.2s;
+  pointer-events: none;
+}
+
+.resize-handle:hover .resize-stick {
+  opacity: 1;
+  width: 4px;
 }
 
 .editor-placeholder {
@@ -70,20 +130,72 @@
 
 .flashcard-sidebar {
   width: 320px;
+  min-width: 250px;
+  max-width: 600px;
   background: white;
   border-left: 1px solid #e5e7eb;
   padding: 24px;
   overflow-y: auto;
-  margin: 24px 24px 24px 0;
-  border-radius: 12px;
+  border-radius: 0 12px 12px 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin: 24px 24px 24px 0;
+  scrollbar-color: #B399D4 #f0f0f0;
+  flex-shrink: 0;
+  position: sticky;
+  top: 100px;
+  bottom: 100px;
+  align-self: flex-start;
+  max-height: calc(100vh - 200px);
+}
+
+.flashcard-sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.flashcard-sidebar::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+.flashcard-sidebar::-webkit-scrollbar-thumb {
+  background: #B399D4;
+  border-radius: 4px;
+}
+
+.flashcard-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #9b7ec4;
+}
+
+.flashcard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
 .flashcard-sidebar h3 {
-  margin: 0 0 16px 0;
+  margin: 0;
   font-size: 18px;
   font-weight: 700;
   color: #1a202c;
+}
+
+.study-mode-button {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+.study-mode-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
 }
 
 .sidebar-placeholder {
@@ -92,6 +204,90 @@
   text-align: center;
   padding: 24px 0;
   line-height: 1.6;
+}
+
+.flashcard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.flashcard-section {
+  font-size: 14px;
+  font-weight: 700;
+  color: #B399D4;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 20px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #B399D4;
+}
+
+.flashcard-section:first-child {
+  margin-top: 0;
+}
+
+.flashcard {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-left: 4px solid #B399D4;
+  padding: 20px 16px;
+  min-height: 80px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.flashcard::before {
+  content: 'TERM';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #B399D4;
+  opacity: 0.5;
+}
+
+.flashcard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(179, 153, 212, 0.2);
+  border-color: #B399D4;
+}
+
+.flashcard:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.flashcard.clicked {
+  animation: flashcardClick 0.4s ease-out;
+}
+
+@keyframes flashcardClick {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  30% {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 8px 20px rgba(179, 153, 212, 0.3);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.flashcard-term {
+  color: #1a202c;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 @media (max-width: 768px) {

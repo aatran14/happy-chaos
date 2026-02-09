@@ -1,10 +1,11 @@
 .markdown-editor-wrapper {
-  height: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  background: white;
+  background: rgba(255, 255, 255, 0.8);
   border-radius: 8px;
   overflow: hidden;
+  min-height: 0;
 }
 
 .markdown-editor {
@@ -13,18 +14,27 @@
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
   font-size: 14px;
   line-height: 1.6;
+  background: rgba(255, 255, 255, 0.8);
 }
 
 /* CodeMirror styling overrides */
 .markdown-editor .cm-editor {
   height: 100%;
   font-size: 15px;
-  background: white;
+  background: rgba(255, 255, 255, 0.8) !important;
 }
 
 .markdown-editor .cm-scroller {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
   padding: 24px;
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .markdown-editor .cm-scroller {
+    scroll-behavior: smooth;
+  }
 }
 
 .markdown-editor .cm-content {
@@ -83,14 +93,8 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
   z-index: 1000;
   pointer-events: none;
-  opacity: 0;
+  opacity: 1;  /* Always show labels */
   transition: opacity 0.2s ease;
-}
-
-/* Show name label on hover or when cursor is active */
-.cm-ySelection:hover .cm-ySelectionInfo,
-.cm-ySelectionInfo.active {
-  opacity: 1;
 }
 
 .cm-ySelectionCaret {
@@ -124,4 +128,18 @@
 .cm-ySelection {
   background-color: inherit;
   opacity: 0.3;
+}
+
+/* Highlight flash animation for flashcard navigation */
+.highlight-flash {
+  animation: highlight-pulse 1s ease-out;
+}
+
+@keyframes highlight-pulse {
+  0% {
+    background-color: rgba(102, 126, 234, 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
 }

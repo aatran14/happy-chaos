@@ -8,7 +8,7 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const { login } = useAuth();
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -23,7 +23,7 @@ export function LoginPage() {
       setError('Incorrect password');
       setPassword('');
     }
-    // No navigation - auth state change will trigger re-render
+    // No reload on login - auth state change handles navigation
   };
 
   return (

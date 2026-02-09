@@ -135,7 +135,13 @@ class CollaborationManager {
 
   private addBeforeUnloadHandler(): void {
     window.addEventListener('beforeunload', () => {
-      console.log('⚠️ Browser closing - forcing final save...');
+      console.log('⚠️ Browser closing - forcing final save and cleanup...');
+
+      // Remove our awareness state immediately so others see us leave
+      if (this.provider) {
+        this.provider.awareness.setLocalState(null);
+      }
+
       if (this.persistence) {
         // Force immediate save (not async - browser might kill us)
         this.persistence.saveNow();

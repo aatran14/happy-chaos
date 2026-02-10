@@ -12,34 +12,46 @@ export function OnlineUsers() {
   const [users, setUsers] = useState<UserInfo[]>([]);
 
   useEffect(() => {
-    const { provider } = collaborationManager.connect();
+    let cleanup: (() => void) | null = null;
 
-    const updateUsers = () => {
-      const states = provider.awareness.getStates();
-      const userList: UserInfo[] = [];
+    (async () => {
+      try {
+        const { provider } = await collaborationManager.connect();
 
-      states.forEach((state: any, clientId: number) => {
-        if (state.user?.name) {
-          userList.push({
-            name: state.user.name,
-            color: state.user.color || '#999',
-            clientId,
+        const updateUsers = () => {
+          const states = provider.awareness.getStates();
+          const userList: UserInfo[] = [];
+
+          states.forEach((state: any, clientId: number) => {
+            if (state.user?.name) {
+              userList.push({
+                name: state.user.name,
+                color: state.user.color || '#999',
+                clientId,
+              });
+            }
           });
-        }
-      });
 
-      setUsers(userList);
-    };
+          setUsers(userList);
+        };
 
-    // Initial update
-    updateUsers();
+        // Initial update
+        updateUsers();
 
-    // Listen for awareness changes
-    provider.awareness.on('change', updateUsers);
+        // Listen for awareness changes
+        provider.awareness.on('change', updateUsers);
+
+        cleanup = () => {
+          provider.awareness.off('change', updateUsers);
+          collaborationManager.disconnect();
+        };
+      } catch (error) {
+        console.error('Failed to connect OnlineUsers:', error);
+      }
+    })();
 
     return () => {
-      provider.awareness.off('change', updateUsers);
-      collaborationManager.disconnect();
+      if (cleanup) cleanup();
     };
   }, []);
 

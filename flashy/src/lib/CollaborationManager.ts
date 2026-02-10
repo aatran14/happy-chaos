@@ -17,6 +17,7 @@ class CollaborationManager {
   private cleanupTimer: NodeJS.Timeout | null = null;
   private dbLoaded: boolean = false;
   private dbLoadPromise: Promise<void> | null = null;
+  private userInfo: { userId: string; color: string; name: string } | null = null;
 
   private constructor() {}
 
@@ -27,7 +28,7 @@ class CollaborationManager {
     return CollaborationManager.instance;
   }
 
-  connect(): { ydoc: Doc; provider: SimpleSupabaseProvider } {
+  async connect(): Promise<{ ydoc: Doc; provider: SimpleSupabaseProvider; userInfo: { userId: string; color: string; name: string } }> {
     this.refCount++;
     console.log('📊 CollaborationManager.connect() - refCount:', this.refCount);
 
@@ -73,17 +74,20 @@ class CollaborationManager {
       // Load from database (store promise so we can wait for it)
       this.dbLoadPromise = this.loadFromDatabase();
 
-      // Set user info with color for CodeMirror cursors
-      const userInfo = generateUserInfo();
-      console.log('👤 User info:', userInfo);
-      this.provider.awareness.setLocalStateField('user', {
-        name: userInfo.name,
-        color: userInfo.color,
-        colorLight: userInfo.color + '40', // Add transparency for selections
-      });
-
-      // Connect
+      // Connect first to sync awareness states
       this.provider.connect();
+
+      // Wait for initial awareness sync, then check room capacity
+      await this.checkRoomCapacity();
+
+      // Set user info with color for CodeMirror cursors (SINGLE SOURCE OF TRUTH)
+      this.userInfo = generateUserInfo();
+      console.log('👤 User info:', this.userInfo);
+      this.provider.awareness.setLocalStateField('user', {
+        name: this.userInfo.name,
+        color: this.userInfo.color,
+        colorLight: this.userInfo.color + '40', // Add transparency for selections
+      });
     } else {
       console.log('♻️  Reusing existing Yjs doc and provider');
 
@@ -92,9 +96,14 @@ class CollaborationManager {
         console.log('🔌 Reconnecting provider...');
         this.provider.connect();
       }
+
+      // Ensure userInfo is set (should be from first connect)
+      if (!this.userInfo) {
+        this.userInfo = generateUserInfo();
+      }
     }
 
-    return { ydoc: this.ydoc, provider: this.provider };
+    return { ydoc: this.ydoc, provider: this.provider, userInfo: this.userInfo! };
   }
 
   /**
@@ -104,6 +113,32 @@ class CollaborationManager {
   async waitForDatabaseSync(): Promise<void> {
     if (this.dbLoadPromise) {
       await this.dbLoadPromise;
+    }
+  }
+
+  /**
+   * Check if room is at capacity (max 8 users)
+   * Waits for initial awareness sync, then checks count
+   */
+  private async checkRoomCapacity(): Promise<void> {
+    if (!this.provider) return;
+
+    const MAX_USERS = 8;
+
+    // Wait for initial awareness sync (500ms should be enough)
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const currentUsers = this.provider.awareness.getStates().size;
+    console.log(`👥 Current users in room: ${currentUsers}/${MAX_USERS}`);
+
+    if (currentUsers >= MAX_USERS) {
+      console.error('❌ Room is full! Cannot join.');
+      // Disconnect immediately
+      this.provider.disconnect();
+      this.provider.destroy();
+      this.provider = null;
+      this.ydoc = null;
+      throw new Error('ROOM_FULL');
     }
   }
 

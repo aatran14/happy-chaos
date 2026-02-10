@@ -25,202 +25,239 @@ export function MarkdownEditor() {
     console.log('🎨 MarkdownEditor: Initializing...');
     console.log('⏸️  Editor disabled until database syncs (Rule 2)');
 
-    // Get Yjs doc and provider from singleton
-    const { ydoc, provider } = collaborationManager.connect();
-    const ytext = ydoc.getText('content');
+    let view: EditorView | null = null;
+    let cleanupCalled = false;
 
-    // Get local user's color for cursor
-    const localUser = provider.awareness.getLocalState()?.user;
-    const userColor = localUser?.color || '#6BCF7F';
+    // Async initialization
+    (async () => {
+      try {
+        // Get Yjs doc and provider from singleton (async now for room capacity check)
+        const { ydoc, provider, userInfo } = await collaborationManager.connect();
+        const ytext = ydoc.getText('content');
 
-    // Get cursor data URL from centralized config
-    const cursorDataUrl = getCursorDataUrl(userColor);
+        // Get local user's color for cursor - single source of truth from CollaborationManager
+        const userColor = userInfo.color;
 
-    console.log('📊 Provider status:', {
-      connected: provider.connected,
-      clientID: ydoc.clientID,
-      awarenessStates: provider.awareness.getStates().size,
-      userColor,
-    });
+        // Get cursor data URL from centralized config
+        const cursorDataUrl = getCursorDataUrl(userColor);
 
-    // Wait for database to load before enabling editor (Rule 2)
-    const waitForSync = async () => {
-      console.log('⏳ Waiting for database to sync...');
-      // Actually wait for database to finish loading
-      await collaborationManager.waitForDatabaseSync();
+        console.log('📊 Provider status:', {
+          connected: provider.connected,
+          clientID: ydoc.clientID,
+          awarenessStates: provider.awareness.getStates().size,
+          userColor,
+        });
 
-      // CRITICAL: Wait 1 more second for real-time updates to arrive
-      // The database might have old data, but real-time will send the latest
-      console.log('⏳ Waiting for real-time updates...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait for database to load before enabling editor (Rule 2)
+        const waitForSync = async () => {
+          console.log('⏳ Waiting for database to sync...');
+          // Actually wait for database to finish loading
+          await collaborationManager.waitForDatabaseSync();
 
-      setIsReady(true);
-      console.log('✅ Database synced - Editor ready!');
-    };
+          // CRITICAL: Wait 1 more second for real-time updates to arrive
+          // The database might have old data, but real-time will send the latest
+          console.log('⏳ Waiting for real-time updates...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
 
-    waitForSync();
+          setIsReady(true);
+          console.log('✅ Database synced - Editor ready!');
+        };
 
-    // Create undo manager for collaborative undo/redo
-    const undoManager = new UndoManager(ytext);
+        waitForSync();
 
-    console.log('📄 Initial Yjs content length:', ytext.length);
+        // Create undo manager for collaborative undo/redo
+        const undoManager = new UndoManager(ytext);
 
-    // Plugin to update fold gutter classes based on fold state
-    const foldStatePlugin = ViewPlugin.fromClass(class {
-      constructor(view: EditorView) {
-        setTimeout(() => this.updateFoldGutters(view), 100);
-      }
+        console.log('📄 Initial Yjs content length:', ytext.length);
 
-      update(update: ViewUpdate) {
-        // Always update to catch fold state changes
-        setTimeout(() => this.updateFoldGutters(update.view), 50);
-      }
+        // Plugin to update fold gutter classes based on fold state
+        const foldStatePlugin = ViewPlugin.fromClass(class {
+          constructor(view: EditorView) {
+            setTimeout(() => this.updateFoldGutters(view), 100);
+          }
 
-      updateFoldGutters(view: EditorView) {
-        // Simple approach: check the marker character itself
-        // › = folded (should show chevron right)
-        // ⌄ = unfolded (should show chevron down)
-        const allGutters = view.dom.querySelectorAll('.cm-foldGutter .cm-gutterElement');
+          update(update: ViewUpdate) {
+            // Always update to catch fold state changes
+            setTimeout(() => this.updateFoldGutters(update.view), 50);
+          }
 
-        allGutters.forEach((gutter: Element) => {
-          const span = gutter.querySelector('span');
+          updateFoldGutters(view: EditorView) {
+            // Simple approach: check the marker character itself
+            // › = folded (should show chevron right)
+            // ⌄ = unfolded (should show chevron down)
+            const allGutters = view.dom.querySelectorAll('.cm-foldGutter .cm-gutterElement');
 
-          if (span && span.textContent) {
-            // If marker is › (right arrow), content is folded
-            if (span.textContent.includes('›')) {
-              gutter.classList.add('folded');
-            } else {
-              gutter.classList.remove('folded');
-            }
+            allGutters.forEach((gutter: Element) => {
+              const span = gutter.querySelector('span');
+
+              if (span && span.textContent) {
+                // If marker is › (right arrow), content is folded
+                if (span.textContent.includes('›')) {
+                  gutter.classList.add('folded');
+                } else {
+                  gutter.classList.remove('folded');
+                }
+              }
+            });
           }
         });
-      }
-    });
 
-    // Create custom theme for local cursor color and custom mouse cursor
-    const cursorTheme = CMEditorView.theme({
-      '.cm-cursor, .cm-dropCursor': {
-        borderLeftColor: userColor,
-        borderLeftWidth: '2px',
-      },
-      '.cm-selectionBackground': {
-        backgroundColor: userColor + '40', // Add transparency
-      },
-      '.cm-content': {
-        cursor: `url(${cursorDataUrl}) 0 0, text`,
-      },
-    });
+        // Create custom theme for local cursor color and custom mouse cursor
+        const cursorTheme = CMEditorView.theme({
+          '.cm-cursor, .cm-dropCursor': {
+            borderLeftColor: userColor,
+            borderLeftWidth: '2px',
+          },
+          '.cm-selectionBackground': {
+            backgroundColor: userColor + '40', // Add transparency
+          },
+          '.cm-content': {
+            cursor: `url(${cursorDataUrl}) 0 0, text`,
+          },
+        });
 
-    // Create CodeMirror editor with Yjs collaboration
-    const state = EditorState.create({
-      doc: ytext.toString(), // Set initial content from Yjs
-      extensions: [
-        basicSetup,
-        markdown(),
-        foldStatePlugin,
-        keymap.of([indentWithTab]),
-        // Wrap yCollab to catch cursor position errors
-        EditorView.exceptionSink.of((exception) => {
-          console.warn('⚠️ CodeMirror exception caught:', exception);
-          // Don't crash the editor on cursor position errors
-          return true; // handled
-        }),
-        yCollab(ytext, provider.awareness, {
-          undoManager,
-        }),
-        cursorTheme,
-      ],
-    });
+        // Check if ref is still valid (component might have unmounted)
+        if (!editorRef.current) return;
 
-    const view = new EditorView({
-      state,
-      parent: editorRef.current,
-    });
+        // Create CodeMirror editor with Yjs collaboration
+        const state = EditorState.create({
+          doc: ytext.toString(), // Set initial content from Yjs
+          extensions: [
+            basicSetup,
+            markdown(),
+            foldStatePlugin,
+            keymap.of([indentWithTab]),
+            yCollab(ytext, provider.awareness, {
+              undoManager,
+            }),
+            // Exception sink AFTER yCollab so it doesn't interfere
+            EditorView.exceptionSink.of((exception) => {
+              console.warn('⚠️ CodeMirror exception caught:', exception);
+              // Check if it's the remote selection error
+              if (exception.message?.includes('RelativePosition')) {
+                console.warn('   Remote caret rendering failed (document length mismatch)');
+              }
+              // Don't crash the editor
+              return true; // handled
+            }),
+            cursorTheme,
+          ],
+        });
 
-    viewRef.current = view;
+        view = new EditorView({
+          state,
+          parent: editorRef.current,
+        });
 
-    console.log('📊 CodeMirror initialized with', view.state.doc.length, 'characters');
+        viewRef.current = view;
 
-    // Disable editing until ready (Rule 2)
-    if (!isReady) {
-      view.contentDOM.setAttribute('contenteditable', 'false');
-      view.contentDOM.style.opacity = '0.5';
-    }
+        console.log('📊 CodeMirror initialized with', view.state.doc.length, 'characters');
 
-    // Add listeners to debug sync
-    ytext.observe((event, transaction) => {
-      const ytextContent = ytext.toString();
-      const editorContent = view.state.doc.toString();
+        // Disable editing until ready (Rule 2)
+        if (!isReady) {
+          view.contentDOM.setAttribute('contenteditable', 'false');
+          view.contentDOM.style.opacity = '0.5';
+        }
 
-      console.log('📝 Yjs text changed:', {
-        local: transaction.local,
-        ytextLength: ytext.length,
-        editorLength: view.state.doc.length,
-        ytextPreview: ytextContent.substring(0, 50) + '...',
-        editorPreview: editorContent.substring(0, 50) + '...',
-        inSync: ytextContent === editorContent,
-      });
+        // Add listeners to debug sync
+        ytext.observe((event, transaction) => {
+          const ytextContent = ytext.toString();
+          const editorContent = view!.state.doc.toString();
 
-      if (ytextContent !== editorContent) {
-        console.warn('⚠️  MISMATCH: Yjs and CodeMirror out of sync!');
-        console.log('  Yjs has:', ytextContent.length, 'chars');
-        console.log('  Editor has:', editorContent.length, 'chars');
-      }
-    });
+          console.log('📝 Yjs text changed:', {
+            local: transaction.local,
+            ytextLength: ytext.length,
+            editorLength: view!.state.doc.length,
+            ytextPreview: ytextContent.substring(0, 50) + '...',
+            editorPreview: editorContent.substring(0, 50) + '...',
+            inSync: ytextContent === editorContent,
+          });
 
-    provider.awareness.on('change', () => {
-      const states = provider.awareness.getStates();
-      console.log('👥 Awareness changed:', {
-        totalUsers: states.size,
-        localClientID: ydoc.clientID,
-      });
-      states.forEach((state: any, clientID: number) => {
-        console.log(`  User ${clientID}:`, state.user);
-      });
-    });
+          if (ytextContent !== editorContent) {
+            console.warn('⚠️  MISMATCH: Yjs and CodeMirror out of sync!');
+            console.log('  Yjs has:', ytextContent.length, 'chars');
+            console.log('  Editor has:', editorContent.length, 'chars');
+          }
+        });
 
-    // Listen for scroll requests from flashcard clicks
-    const handleScrollToLine = (event: any) => {
-      const { lineNumber } = event.detail;
-      if (!viewRef.current) return;
+        provider.awareness.on('change', () => {
+          const states = provider.awareness.getStates();
+          console.log('👥 Awareness changed:', {
+            totalUsers: states.size,
+            localClientID: ydoc.clientID,
+          });
+          states.forEach((state: any, clientID: number) => {
+            console.log(`  User ${clientID}:`, {
+              user: state.user,
+              textCaret: state.cursor, // Text caret position (from yCollab)
+              mouseCursor: state.mouse, // Mouse position (custom)
+              selection: state.selection, // Text selection range
+            });
 
-      const view = viewRef.current;
-      const line = view.state.doc.line(lineNumber + 1); // CodeMirror lines are 1-indexed
-      const pos = line.from;
+            // Debug: Check if remote text carets are being tracked
+            if (clientID !== ydoc.clientID) {
+              if (state.cursor) {
+                console.log(`  🎯 Remote TEXT CARET at:`, state.cursor);
+              }
+              if (state.mouse) {
+                console.log(`  🖱️  Remote MOUSE at:`, state.mouse);
+              }
+            }
+          });
+        });
 
-      // Get the DOM element for the line and find the .cm-line element
-      let element: HTMLElement | null = view.domAtPos(pos)?.node as HTMLElement;
-      while (element && !element.classList?.contains('cm-line')) {
-        element = element.parentElement;
-      }
+        // Listen for scroll requests from flashcard clicks
+        const handleScrollToLine = (event: any) => {
+          const { lineNumber } = event.detail;
+          if (!viewRef.current) return;
 
-      if (element) {
-        // Use native smooth scroll
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const view = viewRef.current;
+          const line = view.state.doc.line(lineNumber + 1); // CodeMirror lines are 1-indexed
+          const pos = line.from;
 
-        // Add highlight effect after scroll completes
-        setTimeout(() => {
+          // Get the DOM element for the line and find the .cm-line element
+          let element: HTMLElement | null = view.domAtPos(pos)?.node as HTMLElement;
+          while (element && !element.classList?.contains('cm-line')) {
+            element = element.parentElement;
+          }
+
           if (element) {
-            element.classList.add('highlight-flash');
+            // Use native smooth scroll
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            // Add highlight effect after scroll completes
             setTimeout(() => {
               if (element) {
-                element.classList.remove('highlight-flash');
+                element.classList.add('highlight-flash');
+                setTimeout(() => {
+                  if (element) {
+                    element.classList.remove('highlight-flash');
+                  }
+                }, 1000);
               }
-            }, 1000);
+            }, 800);
           }
-        }, 800);
+        };
+
+        window.addEventListener('scrollToLine', handleScrollToLine);
+
+        console.log('✅ MarkdownEditor: Ready with collaborative cursors!');
+      } catch (error: any) {
+        console.error('❌ Failed to initialize editor:', error);
+        // Room full error is handled by EditorPage
       }
-    };
-
-    window.addEventListener('scrollToLine', handleScrollToLine);
-
-    console.log('✅ MarkdownEditor: Ready with collaborative cursors!');
+    })();
 
     return () => {
+      if (cleanupCalled) return;
+      cleanupCalled = true;
+
       setIsReady(false);
       console.log('🧹 MarkdownEditor: Cleaning up...');
-      window.removeEventListener('scrollToLine', handleScrollToLine);
-      view.destroy();
+      if (view) {
+        window.removeEventListener('scrollToLine', () => {});
+        view.destroy();
+      }
       collaborationManager.disconnect();
       viewRef.current = null;
     };

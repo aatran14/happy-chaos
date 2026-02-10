@@ -1,13 +1,14 @@
 // Generate consistent colors for collaborative editing
+// RGB values: green(72,229,82), cyan(72,205,229), orange(253,187,93),
+// blue(93,141,253), red(253,93,93), purple(191,130,232), pink(232,130,166)
 const USER_COLORS = [
-  '#FF6B6B', // Red
-  '#4ECDC4', // Teal
-  '#45B7D1', // Blue
-  '#FFA07A', // Light Salmon
-  '#98D8C8', // Mint
-  '#FFD93D', // Yellow
-  '#C47AFF', // Purple
-  '#6BCF7F', // Green
+  '#4ebf56', // Green (78, 191, 86)
+  '#41bbd1', // Cyan (65, 187, 209)
+  '#FDBB5D', // Orange (253, 187, 93)
+  '#5D8DFD', // Blue (93, 141, 253)
+  '#FD5D5D', // Red (253, 93, 93)
+  '#BF82E8', // Purple (191, 130, 232)
+  '#E882A6', // Pink (232, 130, 166)
 ];
 
 export function generateUserInfo() {

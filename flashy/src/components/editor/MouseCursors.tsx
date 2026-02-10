@@ -16,82 +16,93 @@ export function MouseCursors() {
   const [localColor, setLocalColor] = useState('#6BCF7F');
 
   useEffect(() => {
-    const { provider, ydoc } = collaborationManager.connect();
-    const localClientId = ydoc.clientID;
+    let cleanup: (() => void) | null = null;
 
-    // Get local user's color for CSS cursor
-    const localUser = provider.awareness.getLocalState()?.user;
-    const color = localUser?.color || '#6BCF7F';
+    (async () => {
+      try {
+        const { provider, ydoc, userInfo } = await collaborationManager.connect();
+        const localClientId = ydoc.clientID;
+
+        // Get local user's color for CSS cursor - single source of truth from CollaborationManager
+        const color = userInfo.color;
     setLocalColor(color);
 
-    // Get cursor URL from centralized config
-    const cursorUrl = getCursorDataUrl(color);
+        // Get cursor URL from centralized config
+        const cursorUrl = getCursorDataUrl(color);
 
-    // Inject CSS with !important to override CodeMirror
-    const style = document.createElement('style');
-    style.textContent = `
-      body, body * {
-        cursor: url("${cursorUrl}") 0 0, auto !important;
-      }
-    `;
-    document.head.appendChild(style);
+        // Inject CSS with !important to override CodeMirror
+        const style = document.createElement('style');
+        style.textContent = `
+          body, body * {
+            cursor: url("${cursorUrl}") 0 0, auto !important;
+          }
+        `;
+        document.head.appendChild(style);
 
-    // Throttle mouse updates to reduce lag (update max every 50ms)
-    let lastUpdate = 0;
-    const THROTTLE_MS = 50;
+        // Throttle mouse updates to reduce lag (update max every 50ms)
+        let lastUpdate = 0;
+        const THROTTLE_MS = 50;
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const now = Date.now();
-      if (now - lastUpdate < THROTTLE_MS) return;
+        const handleMouseMove = (e: MouseEvent) => {
+          const now = Date.now();
+          if (now - lastUpdate < THROTTLE_MS) return;
 
-      lastUpdate = now;
-      provider.awareness.setLocalStateField('cursor', {
-        x: e.clientX,
-        y: e.clientY,
-      });
-    };
-
-    // Clear cursor when mouse leaves window
-    const handleMouseLeave = () => {
-      provider.awareness.setLocalStateField('cursor', null);
-    };
-
-    // Update cursor list from awareness
-    const updateCursors = () => {
-      const states = provider.awareness.getStates();
-      const cursorList: CursorData[] = [];
-
-      states.forEach((state: any, clientId: number) => {
-        // Skip local cursor - we'll use CSS cursor instead (no lag!)
-        if (clientId === localClientId) return;
-
-        if (state.cursor && state.user?.name) {
-          cursorList.push({
-            x: state.cursor.x,
-            y: state.cursor.y,
-            name: state.user.name,
-            color: state.user.color || '#999',
-            clientId,
+          lastUpdate = now;
+          provider.awareness.setLocalStateField('mouse', { // Changed from 'cursor' to 'mouse'
+            x: e.clientX,
+            y: e.clientY,
           });
-        }
-      });
+        };
 
-      setCursors(cursorList);
-    };
+        // Clear cursor when mouse leaves window
+        const handleMouseLeave = () => {
+          provider.awareness.setLocalStateField('mouse', null); // Changed from 'cursor' to 'mouse'
+        };
 
-    // Set up listeners
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseleave', handleMouseLeave);
-    provider.awareness.on('change', updateCursors);
+        // Update cursor list from awareness
+        const updateCursors = () => {
+          const states = provider.awareness.getStates();
+          const cursorList: CursorData[] = [];
 
-    // Initial update
-    updateCursors();
+          states.forEach((state: any, clientId: number) => {
+            // Skip local cursor - we'll use CSS cursor instead (no lag!)
+            if (clientId === localClientId) return;
+
+            if (state.mouse && state.user?.name) { // Changed from 'cursor' to 'mouse'
+              cursorList.push({
+                x: state.mouse.x, // Changed from 'cursor' to 'mouse'
+                y: state.mouse.y, // Changed from 'cursor' to 'mouse'
+                name: state.user.name,
+                color: state.user.color || '#999',
+                clientId,
+              });
+            }
+          });
+
+          setCursors(cursorList);
+        };
+
+        // Set up listeners
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseleave', handleMouseLeave);
+        provider.awareness.on('change', updateCursors);
+
+        // Initial update
+        updateCursors();
+
+        cleanup = () => {
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseleave', handleMouseLeave);
+          provider.awareness.off('change', updateCursors);
+          collaborationManager.disconnect();
+        };
+      } catch (error) {
+        console.error('Failed to connect MouseCursors:', error);
+      }
+    })();
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseleave', handleMouseLeave);
-      provider.awareness.off('change', updateCursors);
-      collaborationManager.disconnect();
+      if (cleanup) cleanup();
     };
   }, []);
 

@@ -226,6 +226,7 @@
   pointer-events: none;
   opacity: 1;  /* Always show labels */
   transition: opacity 0.2s ease;
+  background-color: #4ebf56; /* Fallback color if plugin doesn't set it */
 }
 
 .cm-ySelectionCaret {
@@ -233,6 +234,7 @@
   width: 2px;
   border-left-style: solid;
   border-left-width: 2px;
+  border-left-color: #4ebf56; /* Fallback color if plugin doesn't set it */
   z-index: 100;
   pointer-events: none;
   animation: cursor-pulse 1s ease-in-out infinite;
@@ -257,8 +259,7 @@
 
 /* Remote selection background */
 .cm-ySelection {
-  background-color: inherit;
-  opacity: 0.3;
+  background-color: rgba(78, 191, 86, 0.3); /* Fallback if plugin doesn't set color */
 }
 
 /* Highlight flash animation for flashcard navigation */

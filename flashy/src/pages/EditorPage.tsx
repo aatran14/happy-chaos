@@ -40,6 +40,7 @@ export function EditorPage() {
     const saved = localStorage.getItem('starredCards');
     return saved ? new Set(JSON.parse(saved)) : new Set();
   });
+  const [isRoomFull, setIsRoomFull] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -187,26 +188,98 @@ export function EditorPage() {
 
   // Subscribe to document changes
   useEffect(() => {
-    const { ydoc } = collaborationManager.connect();
-    const ytext = ydoc.getText('content');
+    const init = async () => {
+      try {
+        const { ydoc } = await collaborationManager.connect();
+        const ytext = ydoc.getText('content');
 
-    // Initial parse
-    const initialCards = parseFlashcards(ytext.toString());
-    setFlashcards(initialCards);
+        // Initial parse
+        const initialCards = parseFlashcards(ytext.toString());
+        setFlashcards(initialCards);
 
-    // Listen for changes
-    const observer = () => {
-      const content = ytext.toString();
-      const cards = parseFlashcards(content);
-      setFlashcards(cards);
+        // Listen for changes
+        const observer = () => {
+          const content = ytext.toString();
+          const cards = parseFlashcards(content);
+          setFlashcards(cards);
+        };
+
+        ytext.observe(observer);
+
+        return () => {
+          ytext.unobserve(observer);
+        };
+      } catch (error: any) {
+        if (error.message === 'ROOM_FULL') {
+          console.log('🚫 Room is full, cannot join');
+          setIsRoomFull(true);
+        } else {
+          console.error('Failed to connect:', error);
+        }
+      }
     };
 
-    ytext.observe(observer);
-
-    return () => {
-      ytext.unobserve(observer);
-    };
+    init();
   }, []);
+
+  // Show "party full" message if room is at capacity
+  if (isRoomFull) {
+    return (
+      <div className="editor-page" style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'linear-gradient(135deg, #F5E1FD 0%, #E8D5F2 100%)',
+      }}>
+        <div style={{
+          textAlign: 'center',
+          padding: '48px',
+          background: 'rgba(255, 255, 255, 0.9)',
+          borderRadius: '16px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          maxWidth: '500px',
+        }}>
+          <Logo size={80} />
+          <h1 style={{
+            fontSize: '32px',
+            color: '#1f2937',
+            marginTop: '24px',
+            marginBottom: '16px',
+          }}>
+            Party's Full! 🎉
+          </h1>
+          <p style={{
+            fontSize: '18px',
+            color: '#6b7280',
+            lineHeight: '1.6',
+          }}>
+            This study session has reached its maximum capacity of 8 users.
+            Please try again later when someone leaves.
+          </p>
+          <button
+            onClick={handleLogout}
+            style={{
+              marginTop: '32px',
+              padding: '12px 32px',
+              fontSize: '16px',
+              fontWeight: 600,
+              color: 'white',
+              background: '#B399D4',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = '#9b7ec4'}
+            onMouseOut={(e) => e.currentTarget.style.background = '#B399D4'}
+          >
+            Back to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="editor-page" style={{

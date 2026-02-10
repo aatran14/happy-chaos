@@ -44,6 +44,20 @@ class CollaborationManager {
 
       this.ydoc = new Doc();
 
+      // Check if IndexedDB is stale (older than 1 hour)
+      const lastVisit = localStorage.getItem('flashy_last_visit');
+      const now = Date.now();
+      const oneHour = 60 * 60 * 1000;
+
+      if (lastVisit && (now - parseInt(lastVisit)) > oneHour) {
+        console.log('🧹 IndexedDB is stale (>1hr old), clearing...');
+        indexedDB.deleteDatabase('flashy-doc');
+        console.log('✅ Stale IndexedDB cleared - will load fresh from database');
+      }
+
+      // Update last visit timestamp
+      localStorage.setItem('flashy_last_visit', now.toString());
+
       // Add IndexedDB persistence for instant local sync
       this.indexeddbProvider = new IndexeddbPersistence('flashy-doc', this.ydoc);
       this.indexeddbProvider.on('synced', () => {
@@ -97,28 +111,36 @@ class CollaborationManager {
     if (this.dbLoaded || !this.persistence || !this.ydoc) return;
 
     try {
-      console.log('🔄 Loading and merging from all sources...');
+      console.log('🔄 Merging CRDT states: IndexedDB + Database...');
 
-      // CRITICAL: Get current state BEFORE loading from database
-      // This preserves any IndexedDB changes
-      const currentState = Y.encodeStateAsUpdate(this.ydoc);
+      // Get IndexedDB state BEFORE loading database
+      // This preserves any local offline edits
+      const indexedDBState = Y.encodeStateAsUpdate(this.ydoc);
+      const indexedDBLength = this.ydoc.getText('content').length;
 
-      // Load from database
+      console.log('📊 IndexedDB state:', indexedDBLength, 'chars');
+
+      // Load from database - this will MERGE with IndexedDB via CRDT
       const loaded = await this.persistence.loadFromDatabase();
       this.dbLoaded = true;
 
-      // If database had content, verify merge happened correctly
-      if (loaded) {
-        console.log('✅ Database content merged with local state');
+      const finalLength = this.ydoc.getText('content').length;
 
-        // Re-apply current state to ensure nothing was lost
-        // Yjs CRDT will merge automatically - no overwrites!
-        if (currentState.length > 0) {
-          Y.applyUpdate(this.ydoc, currentState);
-          console.log('🔀 Merged IndexedDB state with database state');
+      if (loaded) {
+        console.log('✅ CRDT merge complete!');
+        console.log('   IndexedDB had:', indexedDBLength, 'chars');
+        console.log('   Merged result:', finalLength, 'chars');
+
+        // If merged result is different, it means we had offline edits
+        if (finalLength > indexedDBLength) {
+          console.log('🔀 Database had newer content - merged via CRDT');
+        } else if (finalLength < indexedDBLength) {
+          console.log('🔀 IndexedDB had newer content - merged via CRDT');
+        } else if (indexedDBLength > 0) {
+          console.log('✓ Both sources had same content');
         }
       } else {
-        console.log('📝 No database content, using local state only');
+        console.log('📝 No database content, using IndexedDB state only');
       }
 
       // Enable auto-save after loading

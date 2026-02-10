@@ -5,8 +5,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://juberlfvyedrbiixrkxt.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1YmVybGZ2eWVkcmJpaXhya3h0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwNTcyMTcsImV4cCI6MjA4NTYzMzIxN30.Xom-I23EyDMIq_skpdF4lmLNDEg8NZQ9498QfVI6siA';
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL!;
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY!;
 
 export function runSupabaseDebugTest() {
   console.log('🔍 SUPABASE DEBUG TEST: Starting with logger enabled...');

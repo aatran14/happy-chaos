@@ -17,7 +17,9 @@ export function UpdateNotification() {
     const checkForUpdates = async () => {
       try {
         // Fetch index.html with aggressive cache bypass
-        const response = await fetch('/?t=' + Date.now(), {
+        // Use PUBLIC_URL to handle GitHub Pages subdirectory
+        const baseUrl = process.env.PUBLIC_URL || '';
+        const response = await fetch(baseUrl + '/?t=' + Date.now(), {
           cache: 'no-store',
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',

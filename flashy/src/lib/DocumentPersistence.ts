@@ -83,8 +83,8 @@ export class DocumentPersistence {
   }
 
   /**
-   * Immediately save to database - just persist current CRDT state
-   * No conflict detection - CRDT handles merging automatically via real-time sync
+   * Immediately save to database with proper CRDT merge
+   * Loads database state, merges with local, then saves result
    */
   async saveNow(): Promise<void> {
     if (this.isSaving) {
@@ -95,7 +95,29 @@ export class DocumentPersistence {
     this.isSaving = true;
 
     try {
-      // Get current Yjs state
+      const localLength = this.doc.getText('content').length;
+
+      // STEP 1: Load latest from database and merge (in case we missed real-time updates)
+      try {
+        const { data } = await supabase.rpc('get_document', {
+          p_document_id: DOCUMENT_ID,
+        });
+
+        if (data && data[0]?.yjs_state) {
+          const dbState = Uint8Array.from(atob(data[0].yjs_state), c => c.charCodeAt(0));
+          // Merge database state with local - CRDT handles conflicts
+          Y.applyUpdate(this.doc, dbState);
+
+          const mergedLength = this.doc.getText('content').length;
+          if (mergedLength !== localLength) {
+            console.log('🔀 Merged database changes before saving:', localLength, '→', mergedLength, 'chars');
+          }
+        }
+      } catch (mergeError) {
+        console.warn('⚠️  Could not merge database state (continuing with local):', mergeError);
+      }
+
+      // STEP 2: Get merged Yjs state
       const stateVector = Y.encodeStateAsUpdate(this.doc);
       const base64State = btoa(String.fromCharCode.apply(null, Array.from(stateVector)));
 

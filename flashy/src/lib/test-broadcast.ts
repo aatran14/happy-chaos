@@ -5,7 +5,13 @@ export function testBroadcast() {
   console.log('🧪 BROADCAST TEST: Starting...');
 
   const channelName = 'test-' + Date.now();
-  const channel = supabase.channel(channelName);
+  const channel = supabase.channel(channelName, {
+    config: {
+      broadcast: {
+        self: true, // CRITICAL: Receive our own messages for testing
+      },
+    },
+  });
 
   let messageReceived = false;
 

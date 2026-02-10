@@ -119,6 +119,12 @@ export function MarkdownEditor() {
         markdown(),
         foldStatePlugin,
         keymap.of([indentWithTab]),
+        // Wrap yCollab to catch cursor position errors
+        EditorView.exceptionSink.of((exception) => {
+          console.warn('⚠️ CodeMirror exception caught:', exception);
+          // Don't crash the editor on cursor position errors
+          return true; // handled
+        }),
         yCollab(ytext, provider.awareness, {
           undoManager,
         }),

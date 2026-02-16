@@ -5,12 +5,13 @@ import { OnlineUsers } from '../components/editor/OnlineUsers';
 import { MouseCursors } from '../components/editor/MouseCursors';
 import { Logo } from '../components/Logo';
 import { StudyMode } from '../components/StudyMode';
-import { CascadeStack } from '../components/CascadeStack';
 import { collaborationManager } from '../lib/CollaborationManager';
 import { useEffect, useState, useRef } from 'react';
 import { Star, LogOut, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, Play, Edit2, Info } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import './EditorPage.css';
+import packageJson from '../../package.json';
+const version = packageJson.version;
 
 interface Flashcard {
   id: string;
@@ -24,8 +25,8 @@ export function EditorPage() {
   // Single source of truth for editor and sidebar minimum widths
   const MIN_PANEL_WIDTH = 400;
   const MARGIN_LEFT = 24;
-  const MARGIN_GAP = 36;
-  const TOTAL_MARGIN = MARGIN_LEFT + MARGIN_GAP; // 60
+  const MARGIN_GAP = 16;
+  const TOTAL_MARGIN = MARGIN_LEFT + MARGIN_GAP; // 40
 
   const { logout } = useAuth();
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
@@ -316,7 +317,9 @@ export function EditorPage() {
   return (
     <div className="editor-page" style={{
       '--sidebar-width': `${sidebarWidth}px`,
-      '--min-panel-width': `${MIN_PANEL_WIDTH}px`
+      '--min-panel-width': `${MIN_PANEL_WIDTH}px`,
+      '--margin-left': `${MARGIN_LEFT}px`,
+      '--margin-gap': `${MARGIN_GAP}px`
     } as React.CSSProperties}>
       <MouseCursors />
       <div className={`editor-header ${isScrolled ? 'scrolled' : ''}`}>
@@ -340,50 +343,49 @@ export function EditorPage() {
 
       <div
         className={`resize-handle ${isAnimating ? 'animating' : ''}`}
-        style={{ right: `${sidebarWidth + 30}px` }}
+        style={{ right: `calc(var(--sidebar-width) + var(--margin-left) + var(--margin-gap) / 2 - 6px)` }}
         onMouseDown={handleMouseDown}
       >
         <div
           className={`resize-stick ${isAnimating ? 'animating' : ''}`}
-          style={{ right: `${sidebarWidth + 30}px` }}
         />
+        <button
+          className={`resize-toggle-button ${isAnimating ? 'animating' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            const maxWidth = window.innerWidth - (TOTAL_MARGIN + MIN_PANEL_WIDTH);
+            const mediumWidth = Math.floor(window.innerWidth * 0.6);
+            setIsAnimating(true);
+            if (sidebarWidth >= maxWidth - 5) {
+              // At max, toggle to min
+              setSidebarWidth(MIN_PANEL_WIDTH);
+            } else if (sidebarWidth <= MIN_PANEL_WIDTH + 5) {
+              // At min, toggle to medium
+              setSidebarWidth(Math.min(mediumWidth, maxWidth));
+            } else if (sidebarWidth < maxWidth - 5) {
+              // At medium, toggle to max
+              setSidebarWidth(maxWidth);
+            }
+            setTimeout(() => setIsAnimating(false), 500);
+          }}
+          title="Toggle sidebar"
+        >
+          {(() => {
+            const maxWidth = window.innerWidth - (TOTAL_MARGIN + MIN_PANEL_WIDTH);
+            if (sidebarWidth >= maxWidth - 5) {
+              return <ChevronRight size={20} />;
+            } else {
+              return <ChevronLeft size={20} />;
+            }
+          })()}
+        </button>
       </div>
 
       {/* Sidebar rendered with fixed positioning */}
       <div className={`flashcard-sidebar ${isAnimating ? 'animating' : ''}`}>
           <div className="flashcard-header">
             <div className="flashcard-title-row">
-              <div className="flashcard-title-left">
-                <button
-                  className="back-button"
-                  title="Toggle sidebar"
-                  onClick={() => {
-                    const maxWidth = window.innerWidth - (TOTAL_MARGIN + MIN_PANEL_WIDTH);
-                    setIsAnimating(true);
-                    if (sidebarWidth >= maxWidth - 5) {
-                      // At max, toggle to min
-                      setSidebarWidth(MIN_PANEL_WIDTH);
-                    } else if (sidebarWidth <= MIN_PANEL_WIDTH + 5) {
-                      // At min, toggle to max
-                      setSidebarWidth(maxWidth);
-                    } else {
-                      // In middle, toggle to max
-                      setSidebarWidth(maxWidth);
-                    }
-                    setTimeout(() => setIsAnimating(false), 500);
-                  }}
-                >
-                  {(() => {
-                    const maxWidth = window.innerWidth - (TOTAL_MARGIN + MIN_PANEL_WIDTH);
-                    if (sidebarWidth >= maxWidth - 5) {
-                      return <ChevronRight size={24} />;
-                    } else {
-                      return <ChevronLeft size={24} />;
-                    }
-                  })()}
-                </button>
-                <h3>Flashcards</h3>
-              </div>
+              <h3>Flashcards</h3>
               <span className="flashcard-count">
                 {showOnlyStarred
                   ? `${flashcards.filter(card => starredCards.has(card.id)).length} starred`
@@ -431,7 +433,9 @@ export function EditorPage() {
                       whiteSpace: 'nowrap'
                     }}>
                       <div style={{ fontSize: '14px', color: '#333', fontWeight: 500 }}>
-                    made with dreams
+                     <span>made with dreams :)</span>
+                      <br></br>
+                      <span><u>v{version}</u></span>
                       </div>
                     </div>
                   )}
@@ -466,74 +470,31 @@ export function EditorPage() {
 
                     return Object.entries(sections).map(([sectionName, sectionCards]) => {
                       const isCollapsed = collapsedSections.has(sectionName);
+                      const starredCount = sectionCards.filter(card => starredCards.has(card.id)).length;
+                      const sectionHasStarred = starredCount > 0;
                       return (
                         <div key={sectionName} className="flashcard-section-group">
                           <div
                             className="flashcard-section"
                             onClick={() => toggleSectionCollapse(sectionName)}
-                            style={{ cursor: 'pointer', position: 'relative', textAlign: 'center' }}
                           >
-                            <span className="section-collapse-icon" style={{ position: 'absolute', left: '0px', top: '50%', transform: 'translateY(-50%)' }}>
+                            <span className="section-collapse-icon">
                               {isCollapsed ? <ChevronsDownUp size={16} /> : <ChevronsUpDown size={16} />}
                             </span>
-                            {sectionName}
-                          </div>
-                          {isCollapsed ? (
-                            <div style={{ padding: '0 24px 16px 24px' }}>
-                              <CascadeStack
-                                key={`${sectionName}-${sectionCards.map(c => c.id).join('-')}`}
-                                cards={sectionCards}
-                                getCardBackground={(card) => starredCards.has(card.id) ? '#FEF3E2' : '#F9FAFB'}
-                                getCardBorderColor={(card) => starredCards.has(card.id) ? '#F59E0B' : '#B399D4'}
-                                cardGap={(() => {
-                                  const availableSpace = sidebarWidth - 188; // sidebar - padding - cardWidth
-                                  const maxGap = Math.floor(availableSpace / Math.max(1, sectionCards.length - 1));
-                                  return Math.max(1, Math.min(20, maxGap));
-                                })()}
-                                renderCard={(card, isFront) => (
-                                  <div
-                                    className={`flashcard stacked ${starredCards.has(card.id) ? 'starred' : ''}`}
-                                    style={{
-                                      border: 'none',
-                                      background: starredCards.has(card.id) ? '#FEF3E2' : '#F9FAFB'
-                                    }}
-                                  >
-                                    <div className="flashcard-content-wrapper">
-                                      <div className="flashcard-top-row">
-                                        <div className="flashcard-term">{card.term}</div>
-                                        <div className="flashcard-icons">
-                                          <button
-                                            className="icon-button edit"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              window.dispatchEvent(new CustomEvent('scrollToLine', {
-                                                detail: { lineNumber: card.lineNumber }
-                                              }));
-                                            }}
-                                            title="Edit in editor"
-                                          >
-                                            <Edit2 size={18} />
-                                          </button>
-                                          <button
-                                            className={`icon-button star ${starredCards.has(card.id) ? 'starred' : ''}`}
-                                            onClick={(e) => toggleStar(card.id, e)}
-                                            title={starredCards.has(card.id) ? 'Unstar' : 'Star'}
-                                          >
-                                            <Star size={18} fill={starredCards.has(card.id) ? 'currentColor' : 'none'} />
-                                          </button>
-                                        </div>
-                                      </div>
-                                      {card.definition && (
-                                        <div className="flashcard-definition">{card.definition}</div>
-                                      )}
-                                    </div>
-                                  </div>
+                            <span className="section-name">{sectionName}</span>
+                            {isCollapsed && (
+                              <>
+                                {sectionHasStarred && (
+                                  <span className="section-starred">
+                                    <Star size={24} fill="#F59E0B" color="#F59E0B" />
+                                    <span className="section-starred-count">{starredCount}</span>
+                                  </span>
                                 )}
-                                cardWidth={140}
-                                cardHeight={79}
-                              />
-                            </div>
-                          ) : (
+                                <span className="section-badge">{sectionCards.length}</span>
+                              </>
+                            )}
+                          </div>
+                          {!isCollapsed && (
                           <div className="flashcard-list">
                           {sectionCards.map((card) => (
                             <div key={card.id}>
@@ -620,7 +581,9 @@ export function EditorPage() {
                                       </div>
                                     </div>
                                     {card.definition && (
-                                      <div className="flashcard-definition">{card.definition}</div>
+                                      <div className="flashcard-definition">
+                                        <ReactMarkdown>{card.definition}</ReactMarkdown>
+                                      </div>
                                     )}
                                   </div>
                                 </div>

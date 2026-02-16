@@ -73,8 +73,8 @@ BEGIN
 
   -- Create snapshot if needed
   IF v_should_snapshot THEN
-    INSERT INTO document_versions (document_id, version, yjs_state, last_edited_by, created_at)
-    VALUES (p_id, v_new_version, p_yjs_state_base64, p_last_edited_by, NOW());
+    INSERT INTO document_versions (document_id, version, yjs_state, content_text, last_edited_by, created_at)
+    VALUES (p_id, v_new_version, p_yjs_state_base64, p_content_text, p_last_edited_by, NOW());
 
     RETURN json_build_object(
       'success', TRUE,

@@ -22,21 +22,21 @@ export function VersionHistory({ onRestore }: VersionHistoryProps) {
   const loadVersions = useCallback(async () => {
     setLoading(true);
     try {
-      // Get versions from last 30 days
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      // Get all versions from last 7 days
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
       const { data, error } = await supabase
         .from('document_versions')
         .select('version, created_at, last_edited_by')
         .eq('document_id', 'main-document')
-        .gte('created_at', thirtyDaysAgo)
-        .order('created_at', { ascending: false });
+        .gte('created_at', sevenDaysAgo)
+        .order('created_at', { ascending: false })
+        .limit(50); // Show up to 50 snapshots
 
       if (error) throw error;
 
-      // Group by day and keep only the latest snapshot per day
-      const dailyVersions = groupByDay(data || []);
-      setVersions(dailyVersions);
+      // Show all snapshots (no daily grouping)
+      setVersions(data || []);
     } catch (error) {
       console.error('❌ Error loading versions:', error);
     } finally {
@@ -49,22 +49,6 @@ export function VersionHistory({ onRestore }: VersionHistoryProps) {
       loadVersions();
     }
   }, [isOpen, loadVersions]);
-
-  const groupByDay = (versions: Version[]): Version[] => {
-    const dayMap = new Map<string, Version>();
-
-    versions.forEach((version) => {
-      const date = new Date(version.created_at);
-      const dayKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
-
-      // Keep only the first (most recent) version for each day
-      if (!dayMap.has(dayKey)) {
-        dayMap.set(dayKey, version);
-      }
-    });
-
-    return Array.from(dayMap.values());
-  };
 
   const handleRestoreClick = (version: Version) => {
     setConfirmRestore(version);
@@ -121,7 +105,7 @@ export function VersionHistory({ onRestore }: VersionHistoryProps) {
         {isOpen && (
           <div className="version-history-dropdown">
             <div className="version-history-header">
-              <h3>Version History (Daily)</h3>
+              <h3>Version History (7 Days)</h3>
               <button
                 className="version-history-close"
                 onClick={() => setIsOpen(false)}

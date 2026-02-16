@@ -1,5 +1,6 @@
--- Complete Supabase Setup for Flashy
+-- Complete Supabase Setup for Flashy (PATCHED for dev)
 -- Run this entire file in Supabase SQL Editor
+-- Fixes: BIGINT consistency, COALESCE for NULL handling, updated_at trigger
 
 -- 1. Create documents table
 CREATE TABLE IF NOT EXISTS public.documents (
@@ -34,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_document_versions_document_id ON public.document_
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.document_versions ENABLE ROW LEVEL SECURITY;
 
--- 5. Create RLS policies (allow anonymous access)
+-- 5. Create RLS policies (allow anonymous access for dev)
 DROP POLICY IF EXISTS "Allow anonymous access to documents" ON public.documents;
 CREATE POLICY "Allow anonymous access to documents"
   ON public.documents FOR ALL TO anon
@@ -77,7 +78,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 7. CREATE RPC FUNCTION: upsert_document_rpc
+-- 7. CREATE RPC FUNCTION: upsert_document_rpc (FIXED: BIGINT + COALESCE)
 CREATE OR REPLACE FUNCTION public.upsert_document_rpc(
   p_id TEXT,
   p_title TEXT,
@@ -85,21 +86,21 @@ CREATE OR REPLACE FUNCTION public.upsert_document_rpc(
   p_yjs_state_base64 TEXT,
   p_content_text TEXT,
   p_last_edited_by TEXT,
-  p_min_version INTEGER DEFAULT 0,
+  p_min_version BIGINT DEFAULT 0,  -- FIXED: was INTEGER
   p_snapshot_every_n INTEGER DEFAULT 10,
   p_snapshot_every_seconds INTEGER DEFAULT 300
 )
 RETURNS JSON AS $$
 DECLARE
-  v_current_version INTEGER;
-  v_new_version INTEGER;
+  v_current_version BIGINT;  -- FIXED: was INTEGER
+  v_new_version BIGINT;      -- FIXED: was INTEGER
   v_last_snapshot_time TIMESTAMP;
   v_save_count INTEGER;
   v_should_snapshot BOOLEAN := FALSE;
   v_success BOOLEAN := FALSE;
 BEGIN
-  -- Get current version from database
-  SELECT version INTO v_current_version
+  -- Get current version from database (FIXED: added COALESCE)
+  SELECT COALESCE(version, 0) INTO v_current_version
   FROM documents
   WHERE id = p_id;
 
@@ -209,7 +210,22 @@ AS $$
   LIMIT p_limit;
 $$;
 
--- 9. Insert initial empty document
+-- 9. BONUS: Auto-update updated_at trigger
+CREATE OR REPLACE FUNCTION public.trigger_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS set_updated_at ON public.documents;
+CREATE TRIGGER set_updated_at
+  BEFORE UPDATE ON public.documents
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_set_updated_at();
+
+-- 10. Insert initial empty document
 INSERT INTO public.documents (id, title, owner_id, yjs_state, content_text)
 VALUES ('main-document', 'Flashy Knowledge Base', 'anonymous', NULL, '')
 ON CONFLICT (id) DO NOTHING;
